@@ -1,0 +1,119 @@
+application:
+  subdomain: tinytraffic
+  multi_instance: false
+  # 访客是从别人的网站直接把埋点发过来的，这类请求没有懒猫登录态，
+  # 所以只放开采集必需的三条路径；看板、站点管理和改密接口
+  # 继续走平台入口登录。/api/v1 下的读数接口由应用自己的 API Key 鉴权。
+  public_path:
+    - /js/script.js
+    - /api/event
+    - /api/v1
+  injects:
+    # 上游是单口令登录（只有密码框，没有用户名），按商店要求配免密：
+    # request 记下候选口令 -> response 只在 200 时落盘 -> browser 自动填充提交。
+    # 用户在应用里改过口令后，填充跟着 persist 的最新值走。
+    - id: capture-password
+      on: request
+      when:
+        - /api/auth/login
+        - /api/auth/setup
+        - /api/auth/password
+      do: |
+        if (ctx.request.method !== "POST") return;
+        let body = null;
+        try { body = ctx.body.getJSON(); } catch (e) { body = null; }
+        if (!body) return;
+        const candidate = body.new_password || body.password || "";
+        if (!candidate) return;
+        ctx.flow.set("candidate", String(candidate));
+    - id: save-password
+      on: response
+      when:
+        - /api/auth/login
+        - /api/auth/setup
+        - /api/auth/password
+      do: |
+        if (ctx.status !== 200) return;
+        const candidate = ctx.flow.get("candidate");
+        if (!candidate) return;
+        ctx.persist.set("tinytraffic_password", candidate);
+    - id: login-autofill
+      on: browser
+      when:
+        - /login
+      do:
+        - src: builtin://simple-inject-password
+          params:
+            requireUser: false
+            allowPasswordOnly: true
+            allowNewPassword: true
+            password:
+              $persist: "tinytraffic_password"
+              default: "{{ .U.admin_password }}"
+            passwordSelector: "#password"
+            submitSelector: "button[type='submit']"
+            autoSubmit: true
+            retryCount: 20
+            retryIntervalMs: 300
+            observerTimeoutMs: 10000
+  upstreams:
+    - location: /
+      backend: http://tinytraffic:8080/
+services:
+  tinytraffic:
+    # upstream: ghcr.io/egoist/tinytraffic:0.2.1
+    image: ghcr.1ms.run/egoist/tinytraffic:0.2.1
+    # 镜像是 distroless：没有 shell，也没有 curl/wget，所以不配容器健康检查，
+    # 交给平台按 upstream 声明的 8080 端口做自动监测。
+    # 进程以 nonroot（UID/GID 65532）运行，用 run_as 让持久目录按同一身份
+    # 暴露 owner，否则 DuckDB 在 /data 里建不了库。
+    run_as: "65532:65532"
+    environment:
+      - TT_ADDR=:8080
+      - TT_DATA_DIR=/data
+      # 必须开：平台是反向代理，不开的话所有访客都会被算成代理那一个 IP，
+      # 独立访客数塌成 1，Locations 全是 Unknown。
+      - TT_TRUST_PROXY=true
+      # 首启就用部署参数里的口令占住 setup 页，别人抢不到（改密走应用内）。
+      - {{ printf "TT_PASSWORD=%s" .U.admin_password | quote }}
+    binds:
+      # tinytraffic.duckdb：站点、事件、API Key 与会话密钥都在这一个文件里
+      - /lzcapp/var/data:/data
+usage: |
+  tinytraffic 是隐私友好的网站访问统计：单个二进制 + 一个 DuckDB 文件，
+  埋点脚本约 1 KB，不用 Cookie、不存 IP，访客标识是每天轮换盐值的
+  hash(盐, 站点, IP, UA)，事件格式兼容 Plausible。
+
+  首次使用：
+    1. 打开应用会自动完成登录（免密填充），初始口令就是部署参数里的
+       「看板口令」，也可以自己改。
+    2. 想换口令就在账户页改，改完免密填充会自动跟着新值走。
+    3. 新建站点填的是**你自己网站的域名**，不是本统计站的地址。
+    4. 复制埋点片段粘到网站 <head>。LazyCat 上统计站是子域名形式，
+       src 要写本应用的访问地址，例如：
+       <script defer data-domain="example.com"
+               src="https://<本应用访问地址>/js/script.js"></script>
+    5. 需要给脚本或报表读数时，在账户页创建 API Key（tt_ 开头），
+       调用 /api/v1/*，用法见上游 docs/api.md。
+
+  数据与安全：
+    - 全部数据在 var/data/tinytraffic.duckdb（含站点、事件、API Key、
+      会话密钥），卸载应用会一并删除，要留存请提前导出。
+    - 免平台登录的只有 /js/script.js、/api/event 和 /api/v1：
+      前两条是访客上报必需，第三条由应用自己的 API Key 鉴权；
+      看板、站点管理和改密接口仍在平台登录后面。
+    - 开了 TT_TRUST_PROXY，上报接口会读代理转发的客户端 IP：
+      别人能伪造来源 IP 灌水自己站点的数据，但读不到统计结果。
+    - DuckDB 内存上限用上游默认 1GB；localhost 访问和常见爬虫、
+      无头浏览器的事件会被直接丢弃，本机自测看不到数据是正常的。
+    - `tinytraffic password` / `seed` 这类子命令要求先停服
+      （一个库文件只允许一个进程），懒猫里改口令请用应用内的改密。
+
+  说明：
+    - 上游 2026-11-10 才开源，0.2.x 迭代很快，升级前建议先备份 DuckDB 文件。
+    - 上游仓库目前没有 LICENSE 文件（GitHub 识别为 No license），本包按镜像模式
+      只引用作者公开发布的容器镜像，不复制也不修改源码；商用或再分发请先与
+      作者确认授权。
+    - 地理位置用镜像内置的 DB-IP 免费城市库（CC BY 4.0），
+      Locations 卡片会按它的许可要求显示署名。
+    - 本包未在懒猫实机安装验证。

@@ -1,0 +1,18 @@
+package: community.lazycat.app.tinytraffic
+name: tinytraffic
+description: "Privacy-friendly web analytics in one binary: ~1 KB tracker, one DuckDB file, no cookies"
+version: 0.2.1
+min_os_version: "1.6.0"
+homepage: https://github.com/egoist/tinytraffic
+author: egoist
+license: NOASSERTION
+permissions:
+  required:
+    - net.internet
+locales:
+  zh:
+    name: tinytraffic
+    description: 隐私友好的网站访问统计：单个二进制 + 一个 DuckDB 文件，约 1 KB 埋点脚本，不用 Cookie，兼容 Plausible 事件格式
+  en:
+    name: tinytraffic
+    description: Privacy-friendly web analytics in a single binary — ~1 KB tracker, one DuckDB file, no cookies, Plausible-compatible events

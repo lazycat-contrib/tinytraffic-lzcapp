@@ -1,0 +1,44 @@
+version: 1
+
+project:
+  root: .
+  build_config: lzc-build.yml
+  package_file: package.yml
+  output: dist/application.lpk
+  target_arch: amd64
+
+update:
+  strategy: publish
+  allow_downgrade: false
+  version_source:
+    type: image
+    image: tinytraffic
+
+build:
+  toolchains: []
+  run_buildscript: false
+
+images:
+  # 上游把 GitHub Release 和 main 分支都推到 GHCR：
+  #   tag v0.2.1 -> 0.2.1 / 0.2 / latest；push main -> main / sha-xxxxxxx
+  # 只收三段 SemVer 的正式标签，忽略 latest、main 和 sha-* 这些会漂移的标签。
+  - id: tinytraffic
+    target: service
+    service: tinytraffic
+    source: ghcr.io/egoist/tinytraffic
+    channel: stable
+    sort: semver
+    tag_regex: '^v?[0-9]+\.[0-9]+\.[0-9]+$'
+    delivery:
+      mode: mirror
+      require_digest_match: true
+
+stores:
+  official:
+    # 只发布喵喵（私有）商店，不走官方审核
+    enabled: false
+  private:
+    enabled: true
+    skip_if_version_exists: true
+    name: tinytraffic
+    summary: "隐私友好的单二进制网站访问统计：约 1 KB 埋点、不用 Cookie"

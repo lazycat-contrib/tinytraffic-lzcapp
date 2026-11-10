@@ -1,0 +1,17 @@
+params:
+  - id: admin_password
+    type: secret
+    name: "Dashboard Password"
+    description: "Password for the tinytraffic dashboard. It is written on first start so nobody else can claim the setup screen, and it is used to auto-fill the sign-in page. Change it later inside the app."
+    optional: false
+    default_value: "$random(len=20)"
+
+locales:
+  zh:
+    admin_password:
+      name: "看板口令"
+      description: "tinytraffic 看板的登录口令。首次启动就会写入，别人抢不到 setup 页；登录页的免密填充也用它。之后可以在应用里改。"
+  en:
+    admin_password:
+      name: "Dashboard Password"
+      description: "Password for the tinytraffic dashboard. It is written on first start so nobody else can claim the setup screen, and it is used to auto-fill the sign-in page. Change it later inside the app."
