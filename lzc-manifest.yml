@@ -75,7 +75,9 @@ services:
       # 独立访客数塌成 1，Locations 全是 Unknown。
       - TT_TRUST_PROXY=true
       # 首启就用部署参数里的口令占住 setup 页，别人抢不到（改密走应用内）。
-      - {{ printf "TT_PASSWORD=%s" .U.admin_password | quote }}
+      # 这一行不能写成 "- {{ ... }}"：以 { 开头的裸标量会让 YAML 解析失败，
+      # 前缀是 KEY= 才安全。
+      - TT_PASSWORD={{ .U.admin_password }}
     binds:
       # tinytraffic.duckdb：站点、事件、API Key 与会话密钥都在这一个文件里
       - /lzcapp/var/data:/data
