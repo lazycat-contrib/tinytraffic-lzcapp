@@ -61,8 +61,8 @@ application:
       backend: http://tinytraffic:8080/
 services:
   tinytraffic:
-    # upstream: ghcr.io/egoist/tinytraffic:0.2.1
-    image: ghcr.1ms.run/egoist/tinytraffic:0.2.1
+    # upstream: ghcr.io/egoist/tinytraffic:0.3.3
+    image: ghcr.1ms.run/egoist/tinytraffic:0.3.3
     # 镜像是 distroless：没有 shell，也没有 curl/wget，所以不配容器健康检查，
     # 交给平台按 upstream 声明的 8080 端口做自动监测。
     # 进程以 nonroot（UID/GID 65532）运行，用 run_as 让持久目录按同一身份
